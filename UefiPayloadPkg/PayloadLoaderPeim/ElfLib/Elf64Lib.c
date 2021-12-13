@@ -18,13 +18,13 @@
 **/
 Elf64_Shdr *
 GetElf64SectionByIndex (
-  IN  UINT8                 *ImageBase,
-  IN  UINT32                Index
+  IN  UINT8   *ImageBase,
+  IN  UINT32  Index
   )
 {
-  Elf64_Ehdr        *Ehdr;
+  Elf64_Ehdr  *Ehdr;
 
-  Ehdr  = (Elf64_Ehdr *)ImageBase;
+  Ehdr = (Elf64_Ehdr *)ImageBase;
   if (Index >= Ehdr->e_shnum) {
     return NULL;
   }
@@ -42,13 +42,13 @@ GetElf64SectionByIndex (
 **/
 Elf64_Phdr *
 GetElf64SegmentByIndex (
-  IN  UINT8                 *ImageBase,
-  IN  UINT32                Index
+  IN  UINT8   *ImageBase,
+  IN  UINT32  Index
   )
 {
-  Elf64_Ehdr        *Ehdr;
+  Elf64_Ehdr  *Ehdr;
 
-  Ehdr  = (Elf64_Ehdr *)ImageBase;
+  Ehdr = (Elf64_Ehdr *)ImageBase;
   if (Index >= Ehdr->e_phnum) {
     return NULL;
   }
@@ -67,24 +67,26 @@ GetElf64SegmentByIndex (
 **/
 Elf64_Shdr *
 GetElf64SectionByRange (
-  IN  UINT8                 *ImageBase,
-  IN  UINT64                Offset,
-  IN  UINT64                Size
+  IN  UINT8   *ImageBase,
+  IN  UINT64  Offset,
+  IN  UINT64  Size
   )
 {
-  UINT32                    Index;
-  Elf64_Ehdr                *Ehdr;
-  Elf64_Shdr                *Shdr;
+  UINT32      Index;
+  Elf64_Ehdr  *Ehdr;
+  Elf64_Shdr  *Shdr;
 
   Ehdr = (Elf64_Ehdr *)ImageBase;
 
-  Shdr = (Elf64_Shdr *) (ImageBase + Ehdr->e_shoff);
+  Shdr = (Elf64_Shdr *)(ImageBase + Ehdr->e_shoff);
   for (Index = 0; Index < Ehdr->e_shnum; Index++) {
     if ((Shdr->sh_offset == Offset) && (Shdr->sh_size == Size)) {
       return Shdr;
     }
+
     Shdr = ELF_NEXT_ENTRY (Elf64_Shdr, Shdr, Ehdr->e_shentsize);
   }
+
   return NULL;
 }
 
@@ -102,27 +104,28 @@ GetElf64SectionByRange (
 **/
 EFI_STATUS
 ProcessRelocation64 (
-  IN  Elf64_Rela            *Rela,
-  IN  UINT64                RelaSize,
-  IN  UINT64                RelaEntrySize,
-  IN  UINT64                RelaType,
-  IN  INTN                  Delta,
-  IN  BOOLEAN               DynamicLinking
+  IN  Elf64_Rela  *Rela,
+  IN  UINT64      RelaSize,
+  IN  UINT64      RelaEntrySize,
+  IN  UINT64      RelaType,
+  IN  INTN        Delta,
+  IN  BOOLEAN     DynamicLinking
   )
 {
-  UINTN                     Index;
-  UINT64                    *Ptr;
-  UINT32                    Type;
+  UINTN   Index;
+  UINT64  *Ptr;
+  UINT32  Type;
 
   for ( Index = 0
-      ; MultU64x64 (RelaEntrySize, Index) < RelaSize
-      ; Index++, Rela = ELF_NEXT_ENTRY (Elf64_Rela, Rela, RelaEntrySize)
-      ) {
+        ; MultU64x64 (RelaEntrySize, Index) < RelaSize
+        ; Index++, Rela = ELF_NEXT_ENTRY (Elf64_Rela, Rela, RelaEntrySize)
+        )
+  {
     //
     // r_offset is the virtual address of the storage unit affected by the relocation.
     //
-    Ptr = (UINT64 *)(UINTN)(Rela->r_offset + Delta);
-    Type  = ELF64_R_TYPE(Rela->r_info);
+    Ptr  = (UINT64 *)(UINTN)(Rela->r_offset + Delta);
+    Type = ELF64_R_TYPE (Rela->r_info);
     switch (Type) {
       case R_X86_64_NONE:
       case R_X86_64_PC32:
@@ -142,6 +145,7 @@ ProcessRelocation64 (
         } else {
           *Ptr += Delta;
         }
+
         break;
 
       case R_X86_64_32:
@@ -173,7 +177,6 @@ ProcessRelocation64 (
           // Calculation: B + A
           //
           if (RelaType == SHT_RELA) {
-            ASSERT (*Ptr == 0);
             *Ptr = Delta + Rela->r_addend;
           } else {
             //
@@ -188,12 +191,14 @@ ProcessRelocation64 (
           DEBUG ((DEBUG_INFO, "Unsupported relocation type %02X\n", Type));
           ASSERT (FALSE);
         }
+
         break;
 
       default:
         DEBUG ((DEBUG_INFO, "Unsupported relocation type %02X\n", Type));
     }
   }
+
   return EFI_SUCCESS;
 }
 
@@ -207,19 +212,19 @@ ProcessRelocation64 (
 **/
 EFI_STATUS
 RelocateElf64Dynamic (
-  IN    ELF_IMAGE_CONTEXT      *ElfCt
+  IN    ELF_IMAGE_CONTEXT  *ElfCt
   )
 {
-  UINT32                       Index;
-  Elf64_Phdr                   *Phdr;
-  Elf64_Shdr                   *DynShdr;
-  Elf64_Shdr                   *RelShdr;
-  Elf64_Dyn                    *Dyn;
-  UINT64                       RelaOffset;
-  UINT64                       RelaCount;
-  UINT64                       RelaSize;
-  UINT64                       RelaEntrySize;
-  UINT64                       RelaType;
+  UINT32      Index;
+  Elf64_Phdr  *Phdr;
+  Elf64_Shdr  *DynShdr;
+  Elf64_Shdr  *RelShdr;
+  Elf64_Dyn   *Dyn;
+  UINT64      RelaAddress;
+  UINT64      RelaCount;
+  UINT64      RelaSize;
+  UINT64      RelaEntrySize;
+  UINT64      RelaType;
 
   //
   // 1. Locate the dynamic section.
@@ -249,21 +254,23 @@ RelocateElf64Dynamic (
   if (DynShdr == NULL) {
     return EFI_UNSUPPORTED;
   }
+
   ASSERT (DynShdr->sh_type == SHT_DYNAMIC);
   ASSERT (DynShdr->sh_entsize >= sizeof (*Dyn));
 
   //
   // 2. Locate the relocation section from the dynamic section.
   //
-  RelaOffset    = MAX_UINT64;
+  RelaAddress   = MAX_UINT64;
   RelaSize      = 0;
   RelaCount     = 0;
   RelaEntrySize = 0;
   RelaType      = 0;
-  for ( Index = 0, Dyn = (Elf64_Dyn *) (ElfCt->FileBase + DynShdr->sh_offset)
-      ; Index < DivU64x64Remainder (DynShdr->sh_size, DynShdr->sh_entsize, NULL)
-      ; Index++, Dyn = ELF_NEXT_ENTRY (Elf64_Dyn, Dyn, DynShdr->sh_entsize)
-      ) {
+  for ( Index = 0, Dyn = (Elf64_Dyn *)(ElfCt->FileBase + DynShdr->sh_offset)
+        ; Index < DivU64x64Remainder (DynShdr->sh_size, DynShdr->sh_entsize, NULL)
+        ; Index++, Dyn = ELF_NEXT_ENTRY (Elf64_Dyn, Dyn, DynShdr->sh_entsize)
+        )
+  {
     switch (Dyn->d_tag) {
       case DT_RELA:
       case DT_REL:
@@ -274,8 +281,8 @@ RelocateElf64Dynamic (
         // based on the original file value and the memory base address.
         // For consistency, files do not contain relocation entries to ``correct'' addresses in the dynamic structure.
         //
-        RelaOffset = Dyn->d_un.d_ptr - (UINTN) ElfCt->PreferredImageAddress;
-        RelaType   = (Dyn->d_tag == DT_RELA) ? SHT_RELA: SHT_REL;
+        RelaAddress = Dyn->d_un.d_ptr;
+        RelaType    = (Dyn->d_tag == DT_RELA) ? SHT_RELA : SHT_REL;
         break;
       case DT_RELACOUNT:
       case DT_RELCOUNT:
@@ -294,7 +301,7 @@ RelocateElf64Dynamic (
     }
   }
 
-  if (RelaOffset == MAX_UINT64) {
+  if (RelaAddress == MAX_UINT64) {
     ASSERT (RelaCount     == 0);
     ASSERT (RelaEntrySize == 0);
     ASSERT (RelaSize      == 0);
@@ -307,11 +314,21 @@ RelocateElf64Dynamic (
   //
   // Verify the existence of the relocation section.
   //
-  RelShdr = GetElf64SectionByRange (ElfCt->FileBase, RelaOffset, RelaSize);
-  ASSERT (RelShdr != NULL);
+  RelShdr = NULL;
+  for (Index = 0; Index < ElfCt->ShNum; Index++) {
+    RelShdr = GetElf64SectionByIndex (ElfCt->FileBase, Index);
+    ASSERT (RelShdr != NULL);
+    if ((RelShdr->sh_addr == RelaAddress) && (RelShdr->sh_size == RelaSize)) {
+      break;
+    }
+
+    RelShdr = NULL;
+  }
+
   if (RelShdr == NULL) {
     return EFI_UNSUPPORTED;
   }
+
   ASSERT (RelShdr->sh_type == RelaType);
   ASSERT (RelShdr->sh_entsize == RelaEntrySize);
 
@@ -319,9 +336,11 @@ RelocateElf64Dynamic (
   // 3. Process the relocation section.
   //
   ProcessRelocation64 (
-    (Elf64_Rela *) (ElfCt->FileBase + RelShdr->sh_offset),
-    RelShdr->sh_size, RelShdr->sh_entsize, RelShdr->sh_type,
-    (UINTN) ElfCt->ImageAddress - (UINTN) ElfCt->PreferredImageAddress,
+    (Elf64_Rela *)(ElfCt->FileBase + RelShdr->sh_offset),
+    RelShdr->sh_size,
+    RelShdr->sh_entsize,
+    RelShdr->sh_type,
+    (UINTN)ElfCt->ImageAddress - (UINTN)ElfCt->PreferredImageAddress,
     TRUE
     );
   return EFI_SUCCESS;
@@ -337,22 +356,22 @@ RelocateElf64Dynamic (
 **/
 EFI_STATUS
 RelocateElf64Sections  (
-  IN    ELF_IMAGE_CONTEXT      *ElfCt
+  IN    ELF_IMAGE_CONTEXT  *ElfCt
   )
 {
-  EFI_STATUS       Status;
-  Elf64_Ehdr       *Ehdr;
-  Elf64_Shdr       *RelShdr;
-  Elf64_Shdr       *Shdr;
-  UINT32           Index;
-  UINTN            Delta;
+  EFI_STATUS  Status;
+  Elf64_Ehdr  *Ehdr;
+  Elf64_Shdr  *RelShdr;
+  Elf64_Shdr  *Shdr;
+  UINT32      Index;
+  UINTN       Delta;
 
-  Ehdr  = (Elf64_Ehdr *)ElfCt->FileBase;
+  Ehdr = (Elf64_Ehdr *)ElfCt->FileBase;
   if (Ehdr->e_machine != EM_X86_64) {
     return EFI_UNSUPPORTED;
   }
 
-  Delta = (UINTN) ElfCt->ImageAddress - (UINTN) ElfCt->PreferredImageAddress;
+  Delta             = (UINTN)ElfCt->ImageAddress - (UINTN)ElfCt->PreferredImageAddress;
   ElfCt->EntryPoint = (UINTN)(Ehdr->e_entry + Delta);
 
   //
@@ -375,22 +394,27 @@ RelocateElf64Sections  (
   //  The below relocation is needed in this case.
   //
   DEBUG ((DEBUG_INFO, "EXEC ELF: Fix actual/preferred base address delta ...\n"));
-  for ( Index = 0, RelShdr = (Elf64_Shdr *) (ElfCt->FileBase + Ehdr->e_shoff)
-      ; Index < Ehdr->e_shnum
-      ; Index++,   RelShdr = ELF_NEXT_ENTRY (Elf64_Shdr, RelShdr, Ehdr->e_shentsize)
-      ) {
+  for ( Index = 0, RelShdr = (Elf64_Shdr *)(ElfCt->FileBase + Ehdr->e_shoff)
+        ; Index < Ehdr->e_shnum
+        ; Index++, RelShdr = ELF_NEXT_ENTRY (Elf64_Shdr, RelShdr, Ehdr->e_shentsize)
+        )
+  {
     if ((RelShdr->sh_type != SHT_REL) && (RelShdr->sh_type != SHT_RELA)) {
       continue;
     }
+
     Shdr = GetElf64SectionByIndex (ElfCt->FileBase, RelShdr->sh_info);
     if ((Shdr->sh_flags & SHF_ALLOC) == SHF_ALLOC) {
       //
       // Only fix up sections that occupy memory during process execution.
       //
       ProcessRelocation64 (
-        (Elf64_Rela *)((UINT8*)Ehdr + RelShdr->sh_offset),
-        RelShdr->sh_size, RelShdr->sh_entsize, RelShdr->sh_type,
-        Delta, FALSE
+        (Elf64_Rela *)((UINT8 *)Ehdr + RelShdr->sh_offset),
+        RelShdr->sh_size,
+        RelShdr->sh_entsize,
+        RelShdr->sh_type,
+        Delta,
+        FALSE
         );
     }
   }
@@ -413,13 +437,13 @@ RelocateElf64Sections  (
 **/
 EFI_STATUS
 LoadElf64Image (
-  IN    ELF_IMAGE_CONTEXT    *ElfCt
+  IN    ELF_IMAGE_CONTEXT  *ElfCt
   )
 {
-  Elf64_Ehdr    *Ehdr;
-  Elf64_Phdr    *Phdr;
-  UINT16        Index;
-  UINTN         Delta;
+  Elf64_Ehdr  *Ehdr;
+  Elf64_Phdr  *Phdr;
+  UINT16      Index;
+  UINTN       Delta;
 
   ASSERT (ElfCt != NULL);
 
@@ -429,14 +453,16 @@ LoadElf64Image (
   Ehdr = (Elf64_Ehdr *)ElfCt->FileBase;
 
   for ( Index = 0, Phdr = (Elf64_Phdr *)(ElfCt->FileBase + Ehdr->e_phoff)
-      ; Index < Ehdr->e_phnum
-      ; Index++, Phdr = ELF_NEXT_ENTRY (Elf64_Phdr, Phdr, Ehdr->e_phentsize)
-      ) {
+        ; Index < Ehdr->e_phnum
+        ; Index++, Phdr = ELF_NEXT_ENTRY (Elf64_Phdr, Phdr, Ehdr->e_phentsize)
+        )
+  {
     //
     // Skip segments that don't require load (type tells, or size is 0)
     //
     if ((Phdr->p_type != PT_LOAD) ||
-        (Phdr->p_memsz == 0)) {
+        (Phdr->p_memsz == 0))
+    {
       continue;
     }
 
@@ -444,9 +470,9 @@ LoadElf64Image (
     // The memory offset of segment relative to the image base
     // Note: CopyMem() does nothing when the dst equals to src.
     //
-    Delta = (UINTN) Phdr->p_paddr - (UINTN) ElfCt->PreferredImageAddress;
-    CopyMem (ElfCt->ImageAddress + Delta, ElfCt->FileBase + (UINTN) Phdr->p_offset, (UINTN) Phdr->p_filesz);
-    ZeroMem (ElfCt->ImageAddress + Delta + (UINTN) Phdr->p_filesz, (UINTN) (Phdr->p_memsz - Phdr->p_filesz));
+    Delta = (UINTN)Phdr->p_paddr - (UINTN)ElfCt->PreferredImageAddress;
+    CopyMem (ElfCt->ImageAddress + Delta, ElfCt->FileBase + (UINTN)Phdr->p_offset, (UINTN)Phdr->p_filesz);
+    ZeroMem (ElfCt->ImageAddress + Delta + (UINTN)Phdr->p_filesz, (UINTN)(Phdr->p_memsz - Phdr->p_filesz));
   }
 
   //
