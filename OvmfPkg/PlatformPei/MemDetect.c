@@ -223,6 +223,8 @@ QemuUc32BaseInitialization (
 STATIC
 EFI_STATUS
 ScanOrAdd64BitE820Ram (
+  IN BOOLEAN  AddHighHob,
+  OUT UINT64  *LowMemory OPTIONAL,
   OUT UINT64  *MaxAddress OPTIONAL
   )
 {
@@ -241,6 +243,10 @@ ScanOrAdd64BitE820Ram (
     return EFI_PROTOCOL_ERROR;
   }
 
+  if (LowMemory != NULL) {
+    *LowMemory = 0;
+  }
+
   if (MaxAddress != NULL) {
     *MaxAddress = BASE_4GB;
   }
@@ -256,10 +262,8 @@ ScanOrAdd64BitE820Ram (
       E820Entry.Length,
       E820Entry.Type
       ));
-    if ((E820Entry.Type == EfiAcpiAddressRangeMemory) &&
-        (E820Entry.BaseAddr >= BASE_4GB))
-    {
-      if (MaxAddress == NULL) {
+    if (E820Entry.Type == EfiAcpiAddressRangeMemory) {
+      if (AddHighHob && (E820Entry.BaseAddr >= BASE_4GB)) {
         UINT64  Base;
         UINT64  End;
 
@@ -279,17 +283,29 @@ ScanOrAdd64BitE820Ram (
             End
             ));
         }
-      } else {
+      }
+
+      if (MaxAddress || LowMemory) {
         UINT64  Candidate;
 
         Candidate = E820Entry.BaseAddr + E820Entry.Length;
-        if (Candidate > *MaxAddress) {
+        if (MaxAddress && (Candidate > *MaxAddress)) {
           *MaxAddress = Candidate;
           DEBUG ((
             DEBUG_VERBOSE,
             "%a: MaxAddress=0x%Lx\n",
             __FUNCTION__,
             *MaxAddress
+            ));
+        }
+
+        if (LowMemory && (Candidate > *LowMemory) && (Candidate < BASE_4GB)) {
+          *LowMemory = Candidate;
+          DEBUG ((
+            DEBUG_VERBOSE,
+            "%a: LowMemory=0x%Lx\n",
+            __FUNCTION__,
+            *LowMemory
             ));
         }
       }
@@ -304,8 +320,15 @@ GetSystemMemorySizeBelow4gb (
   VOID
   )
 {
-  UINT8  Cmos0x34;
-  UINT8  Cmos0x35;
+  EFI_STATUS  Status;
+  UINT64      LowerMemorySize = 0;
+  UINT8       Cmos0x34;
+  UINT8       Cmos0x35;
+
+  Status = ScanOrAdd64BitE820Ram (FALSE, &LowerMemorySize, NULL);
+  if ((Status == EFI_SUCCESS) && (LowerMemorySize > 0)) {
+    return (UINT32)LowerMemorySize;
+  }
 
   //
   // CMOS 0x34/0x35 specifies the system memory above 16 MB.
@@ -376,7 +399,7 @@ GetFirstNonAddress (
   // Otherwise, get the flat size of the memory above 4GB from the CMOS (which
   // can only express a size smaller than 1TB), and add it to 4GB.
   //
-  Status = ScanOrAdd64BitE820Ram (&FirstNonAddress);
+  Status = ScanOrAdd64BitE820Ram (FALSE, NULL, &FirstNonAddress);
   if (EFI_ERROR (Status)) {
     FirstNonAddress = BASE_4GB + GetSystemMemorySizeAbove4gb ();
   }
@@ -760,7 +783,6 @@ QemuInitializeRam (
   // Determine total memory size available
   //
   LowerMemorySize = GetSystemMemorySizeBelow4gb ();
-  UpperMemorySize = GetSystemMemorySizeAbove4gb ();
 
   if (mBootMode == BOOT_ON_S3_RESUME) {
     //
@@ -809,9 +831,12 @@ QemuInitializeRam (
     // entries. Otherwise, create a single memory HOB with the flat >=4GB
     // memory size read from the CMOS.
     //
-    Status = ScanOrAdd64BitE820Ram (NULL);
-    if (EFI_ERROR (Status) && (UpperMemorySize != 0)) {
-      AddMemoryBaseSizeHob (BASE_4GB, UpperMemorySize);
+    Status = ScanOrAdd64BitE820Ram (TRUE, NULL, NULL);
+    if (EFI_ERROR (Status)) {
+      UpperMemorySize = GetSystemMemorySizeAbove4gb ();
+      if (UpperMemorySize != 0) {
+        AddMemoryBaseSizeHob (BASE_4GB, UpperMemorySize);
+      }
     }
   }
 
