@@ -700,10 +700,8 @@ UefiDevicePathLibGetNextDevicePathInstance (
   //
   // Make a copy and return the device path instance
   //
-  Temp             = DevPath->SubType;
-  DevPath->SubType = END_ENTIRE_DEVICE_PATH_SUBTYPE;
   ReturnValue      = DuplicateDevicePath (*DevicePath);
-  DevPath->SubType = Temp;
+  ReturnValue->SubType = END_ENTIRE_DEVICE_PATH_SUBTYPE;
 
   //
   // If DevPath is the end of an entire device path, then another instance
