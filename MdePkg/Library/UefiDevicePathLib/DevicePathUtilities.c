@@ -670,7 +670,6 @@ UefiDevicePathLibGetNextDevicePathInstance (
   EFI_DEVICE_PATH_PROTOCOL  *DevPath;
   EFI_DEVICE_PATH_PROTOCOL  *ReturnValue;
   UINT8                     Temp;
-
   ASSERT (Size != NULL);
 
   if (DevicePath == NULL || *DevicePath == NULL) {
@@ -699,9 +698,11 @@ UefiDevicePathLibGetNextDevicePathInstance (
   // Make a copy and return the device path instance
   //
   Temp              = DevPath->SubType;
-  DevPath->SubType  = END_ENTIRE_DEVICE_PATH_SUBTYPE;
+  // DEBUG ((DEBUG_INFO, "JM: %p\n", &(DevPath->SubType)));
+  // Not sure why it cause Page Fault Exception.
+  //DevPath->SubType  = END_ENTIRE_DEVICE_PATH_SUBTYPE;
   ReturnValue       = DuplicateDevicePath (*DevicePath);
-  DevPath->SubType  = Temp;
+  //DevPath->SubType  = Temp;
 
   //
   // If DevPath is the end of an entire device path, then another instance
